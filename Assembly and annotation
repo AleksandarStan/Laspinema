@@ -1,6 +1,6 @@
 #!/bin/bash
 
-sample=D2d
+sample=D2a
 curdir=/home/alex/samples/
 tirm=/home/programs/trimmomatic/trimmomatic-0.39.jar
 spades=/home/programs/spades/spades.py
