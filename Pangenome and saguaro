@@ -1,0 +1,19 @@
+#!/bin/bash
+curdir=/home/alex/pangenome/
+sagdir=/home/alex/saguaro/
+saguaro=/home/programs/saguaro/saguarogw-code-r44/
+alignment=/home/alex/saguaro/alignment.fa
+
+#Pan-genome analysis
+#In the directorium with all gff annotations. For plotting the presence/absence matrix, phylogenetic tree from core genes (output of roary) was used
+roary -f ./output_directory -e -n -v *.gff
+python roary_plot.py ${curdir}/output_directory/core.nwk ${curdir}/output_directory/gene_presence_absence.csv
+
+#Saguaro
+${saguaro}/Fasta2HMMFeature -i ${alignment} -o ${sagdir}/saguaro_out -nosame
+${saguaro}/Saguaro -f ${sagdir}/saguaro_out -o ${sagdir}/saguout_dir -iter 20
+cd saguout_dir
+ruby paint_chromosomes.rb LocalTrees.out LocalTrees.svg
+${saguaro}/Saguaro2Phylip -i saguaro.cactus
+#rename each cactus to infile to get individual topologies
+phylip neighbor infile
