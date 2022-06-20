@@ -1,0 +1,24 @@
+#!/bin/bash
+
+sample=D2d
+curdir=/home/alex/samples/
+tirm=/home/programs/trimmomatic/trimmomatic-0.39.jar
+spades=/home/programs/spades/spades.py
+maxbin=/home/programs/maxbin/run_MaxBin.pl
+
+#Filter raw reads and trim
+java -jar $trim PE -threads 24 -phred 33 $curdir/${sample}.1.fastq.gz $curdir/${sample}.2.fastq.gz $curdir/${sample}.output_forward_paired.fq.gz \
+$curdir/${sample}.output_forward_unpaired.fq.gz $curdir/${sample}.output_reverse_paired.fq.gz $curdir/${sample}.output_reverse_unpaired.fq.gz \
+ILLUMINACLIP:/${trim}TruSeq3-PE-2.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:50
+
+#Genome assembly
+$spades -t 24 --isolate --pe1-1 $curdir/${sample}.output_forward_paired.fq.gz --pe1-2 $curdir/${sample}.output_reverse_paired.fq.gz
+--pe1-s $curdir/${sample}.output_forward_unpaired.fq.gz --pe2-s $curdir/${sample}.output_reverse_unpaired.fq.gz -o spades
+
+#Binning
+#make a read.list by listing read files and their paths
+ls -d $PWD/*output* > read.list
+$maxbin -contig $curdir/spades/scaffolds.fasta -out ${sample}.bin -reads_list read.list -thread 24
+
+#Annotate fasta files created in binning stage
+prokka $curdir/${sample}.bin.fasta --outdir ${sample}.prokka
