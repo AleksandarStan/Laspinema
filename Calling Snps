@@ -1,0 +1,72 @@
+#!/bin/bash
+
+sample=D2a
+reference=/home/alex/snp/O.acuimata.fna
+curdir=/home/alex/snp/
+fold=/home/alex/samples/
+picard=/home/programs/picard/picard.jar
+gatk=/home/programs/gatk/gatk.jar
+
+#Index reference sequence
+bwa index -a ${reference}
+samtools faidx ${reference}
+
+#Create sequence dictionary
+java -jar $picard CreateSequenceDictionary -R=${reference} OUTPUT -O=${reference}.dict
+
+#Align trimmed reads and assign read group (bwamem version 0.7.17-r1188)
+bwa mem -R '@RG\tID:${sample}\tSM:${sample}\tPL:illumina\tSW:bwa' ${reference} ${fold}/${sample}.1.fastq.gz ${fold}/${sample}.2.fastq.gz > $curdir/${sample}.aln.sam
+
+#Convert SAM file to BAM, sort and index
+samtools view -bS $curdir/${sample}.aln.sam -o ${sample}.aln.bam
+samtools sort ${sample}.aln.bam > ${sample}.aln.sort.bam
+samtools index ${sample}.aln.sort.bam
+
+#Mark duplicates and index output file
+java -jar $picard MarkDuplicates -I ${sample}.aln.sort.bam -O ${sample}.dedup.bam -METRICS_FILE metrics.txt
+samtools index ${sample}.dedup.bam
+
+#Call Variants (variable and invariable sites)
+java -jar $gatk HaplotypeCaller -R ${reference} -I ${sample}.dedup.bam -ploidy 1 -ERC BP_RESOLUTION -O ${sample}.g.vcf.gz
+
+#Merge g.vcfs
+java -jar $gatk GenomicsDBImport -V *.g.vcf --genomicsdb-workspace-path my_database/ -L NC_019694.1 -L NC_019700.1 -L NC_019693.1
+
+#Joint genotyping
+java -jar $gatk GenotypeGVCFs -R ${reference} -V gendb://my_database -O all.vcf
+
+#Select SNP and Indel variants
+java -jar $gatk SelectVariants -R ${reference} -V all.vcf -select-type SNP -O snp.vcf
+java -jar $gatk SelectVariants -R ${reference} -V all.vcf -select-type INDEL -O indel.vcf
+
+#Filtering SNPs
+java -jar $gatk VariantFiltration -R ${reference} -V snp.vcf --filter-expression "QD < 2.0" --filter-name "QD2" --filter-expression "SOR > 3.0"
+--filter-name "SOR3" --filter-expression "MQ < 40.0" --filter-name "MQ40" --filter-expression "FS > 60.0" --filter-name "FS60"  -O snp_filter.vcf
+
+java -jar $gatk SelectVariants -R ${reference} -V snp_filter.vcf -O snp_filter_pass.vcf --exclude-filtered
+
+#Additional filtering steps
+vcftools -vcf snp_filter_pass.vcf --minGQ 30 --maf 0.1 --stdout --recode --min-alleles 2 --max-alleles 2 | bgzip -c > ./snps.vcf.gz
+tabix snps.vcf.gz
+
+#Extracted only invariable sites (not needed)
+java -jar $gatk -R ${reference} -V all.vcf --max-indel-size 0 -O all_nind.vcf
+vcftools --vcf all_nind.vcf --max-maf 0 --recode --stdout | bgzip -c > inv.vcf.gz
+java -jar $gatk SelectVariants -R ${reference} -V inv.vcf.gz --filter-expression "QUAL > 0" --filter-name "Qual" -O inv_f.vcf.gz
+java -jar $gatk SelectVariants -R ${reference} -V inv_f.vcf.gz -O inv_f_pass.vcf.gz --exclude-filtered
+tabix inv_f_pass.vcf.gz
+bcftools concat --allow-overlaps snps.vcf.gz inv_f_pass.vcf.gz -O z -o full.vcf.gz
+
+#Haploidize the data
+sed 's/.\/././g' full.vcf.gz > full.vcf
+
+#Extract consensus sequences from vcf file
+cat ${reference} | vcf-consensus -s {sample} -H 1 full.vcf > ${sample}.fa
+cat ${sample}.fa | sed -e '1!{/^>.*/d;}' | sed ':a;N;$!ba;s/\n//2g' > {sample}_seq.fa
+
+#Make an alignment from extracted sequences
+for f in *.fa; do cat *.fa | sed -e '1!{/^>.*/d;}' | sed ':a;N;$!ba;s/\n//2g' > *.fa; done
+
+#Convert VCF snps to format to fasta for the phylogeny (https://github.com/edgardomortiz/vcf2phylip)
+python3 vcf2fasta.py -i snp.vcf -o specified_outgroup -f -m 4
+
