@@ -1,0 +1,32 @@
+#!/bin/bash
+alignment=/home/alex/saguaro/alignment.fa
+curdir=/home/alex/snp/
+snp=/home/alex/snp/snps.vcf
+
+#Recombination with gubbins using the same alignment as for saguaro
+run_gubbins.py --prefix gubbins_out --first-tree-build rapidnj --first-model JC --tree-builder raxmlng --model GTR ${alignment}
+
+#Calculate LD with plink
+#make text files with samples names and populations
+#subset vcfs per population (D2.txt contains D2a, D2b, and D2c; D3.txt contains D3a,D3b,D3c,and D3d samples)
+bcftools view -S ${curdir}/D2.txt -o ${curdir}/D2.vcf ${snp}
+bcftools view -S ${curdir}/D3.txt -o ${curdir}/D3.vcf ${snp}
+#Estimate LD for chromosome NC_019693.1 on D2 and D3 subset populations
+bgzip -c D3.vcf > D3.vcf.gz
+bgzip -c D2.vcf > D2.vcf.gz
+tabix -p vcf D3.vcf.gz
+tabix -p vcf D2.vcf.gz
+bcftools view D3.vcf.gz --regions NC_019693.1 > D3_chr.vcf.gz
+bcftools view D2.vcf.gz --regions NC_019693.1 > D2_chr.vcf.gz
+
+#Let's do the LD using plink
+#Prepare input files for plink, we need map+ped from vcftools first for thinning SNPs
+vcftools --gzvcf D2.vcf.gz --recode --recode-INFO-all --thin 250 --out D2_thin.vcf.gz
+vcftools --gzvcf D3.vcf.gz --recode --recode-INFO-all --thin 250 --out D3_thin.vcf.gz
+vcftools --vcf D2_thin.vcf.recode.gz --plink --out D2forLD
+vcftools --vcf D3_thin.vcf.recode.gz --plink --out D3forLD
+#prepare SampleSort.list text file that has 2 columns (one with all 0, and the second one with sample names) 
+plink --vcf D2_thin.vcf.recode.gz --keep-allele-order --indiv-sort file SampleSort.list --const-fid 0 --allow-extra-chr 0 --make-bed --out D2forLD
+plink --vcf D3_thin.vcf.recode.gz --keep-allele-order --indiv-sort file SampleSort.list --const-fid 0 --allow-extra-chr 0 --make-bed --out D3forLD
+plink --file D2forLD --r2 --ld-window 999999 --ld-window-kb 9999999 --ld-window-r2 0 --out D2ld
+plink --file D3forLD --r2 --ld-window 999999 --ld-window-kb 9999999 --ld-window-r2 0 --out D3ld
