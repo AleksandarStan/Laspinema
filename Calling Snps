@@ -49,7 +49,7 @@ java -jar $gatk SelectVariants -R ${reference} -V snp_filter.vcf -O snp_filter_p
 vcftools -vcf snp_filter_pass.vcf --minGQ 30 --maf 0.1 --stdout --recode --min-alleles 2 --max-alleles 2 | bgzip -c > ./snps.vcf.gz
 tabix snps.vcf.gz
 
-#Extracted only invariable sites (not needed)
+#Extracted only invariable sites (this step can be skipped as consensus sequences were extracted with vcf-consensus)
 java -jar $gatk -R ${reference} -V all.vcf --max-indel-size 0 -O all_nind.vcf
 vcftools --vcf all_nind.vcf --max-maf 0 --recode --stdout | bgzip -c > inv.vcf.gz
 java -jar $gatk SelectVariants -R ${reference} -V inv.vcf.gz --filter-expression "QUAL > 0" --filter-name "Qual" -O inv_f.vcf.gz
@@ -67,6 +67,6 @@ cat ${sample}.fa | sed -e '1!{/^>.*/d;}' | sed ':a;N;$!ba;s/\n//2g' > {sample}_s
 #Make an alignment from extracted sequences
 for f in *.fa; do cat *.fa | sed -e '1!{/^>.*/d;}' | sed ':a;N;$!ba;s/\n//2g' > *.fa; done
 
-#Convert VCF snps to format to fasta for the phylogeny (https://github.com/edgardomortiz/vcf2phylip)
-python3 vcf2fasta.py -i snp.vcf -o specified_outgroup -f -m 4
+#Convert VCF snps to fasta for the phylogeny (https://github.com/edgardomortiz/vcf2phylip)
+python3 vcf2fasta.py -i snp.vcf -f -m 4
 
