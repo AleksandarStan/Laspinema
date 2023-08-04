@@ -16,6 +16,7 @@ laspinema <- set.populations(laspinema, populations, diploid = F)
 #Preparing the dataset to calculate measurements in 50kb window size with a step of 12.5kb
 laspinema_sw_50 <- sliding.window.transform(laspinema, width = 50000, jump = 12500, type = 2)
 laspinema_sw_50 <- diversity.stats(laspinema_sw_50, pi = TRUE)
+laspinema_nuc_div_sw_50 <- laspinema_sw_50@nuc.diversity.within
 laspinema_nuc_div_sw_50 <- laspinema_nuc_div_sw_50/50000
 position <- seq(from = 1, to = 7804270, by = 12500) + 50000
 position <- seq(from = 1, to = 7804270, by = 12500)
@@ -33,12 +34,20 @@ pops <- c("D2", "D3")
 colnames(nd_50) <- paste0(pops, "_pi")
 Fst_value_50 <- t(laspinema_sw_50_fst@nuc.F_ST.pairwise)
 dxy_50 <- get.diversity(laspinema_sw_50_fst, between = T) [[2]]/50000
+xx <- colnames(Fst_value_50)
+xx <- sub("pop1", "D2", xx)
+xx <- sub("pop1", pops[1], xx)
+xx <- sub("pop2", pops[2], xx)
+xx <- sub("/", "_", xx)
+colnames(Fst_value_50) <- paste0(xx, "_fst")
+colnames(dxy_50) <- paste0(xx, "_dxy")
 
 #Data frame with all the values; Fst, Dxy, piD2, piD1
 laspinema_data_50 <- as_tibble(data.frame(windows, nd_50, Fst_value_50, dxy_50))
 laspinema_data_50 %>% select(contains("pi")) %>% summarise_all(mean)
+write.csv(laspinema_data_50, "./new.csv")
 
-#remove the row with the region of inflated Fst (2886362 position)
+#remove the row with the region of inflated Fst (2862501 mid position)
 #load new file without the region
 new <- read.csv("./new.csv", row.names=1)
 
